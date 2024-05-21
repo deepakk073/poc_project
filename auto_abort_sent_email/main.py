@@ -56,7 +56,7 @@ def send_email_to_aborted_user():
     client = bigquery.Client()
     query = """
     SELECT id, Email_Subject, Email_to, Email_message
-    FROM `cloud_run_tmp.aborted_email`
+    FROM `cloud_run_tmp.email_outbox`
     WHERE email_sent = 0
 """
     # Execute the query
@@ -90,7 +90,7 @@ def send_email_to_aborted_user():
     # Update the BigQuery table to mark emails as sent
     if sent_email_ids:
         update_query = """
-            UPDATE `cloud_run_tmp.aborted_email`
+            UPDATE `cloud_run_tmp.email_outbox`
             SET email_sent = 1
             WHERE id IN UNNEST(@ids)
         """
