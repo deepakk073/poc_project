@@ -35,6 +35,6 @@ gcloud eventarc triggers create ${SERVICE}-trigger \
   --event-filters type=google.cloud.audit.log.v1.written \
   --event-filters methodName=google.cloud.bigquery.v2.JobService.InsertJob \
   --event-filters serviceName=bigquery.googleapis.com \
-  --event-filters resourceName="projects/${PROJECT}/datasets/cloud_run_tmp/tables/aborted_email"
+  --event-filters resourceName="projects/${PROJECT}/datasets/cloud_run_tmp/tables/email_outbox"
   
 #  --event-filters resourceName=projects/_/buckets/"$MY_GCS_BUCKET"
