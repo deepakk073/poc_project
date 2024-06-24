@@ -12,3 +12,5 @@ Create or replace table deepak.table_copy (
 select * from deepak.table_copy ;
 insert into deepak.table_copy values (1,'mlconsole-poc','deepak','aborted_email','mlconsole-poc','Ashok','aborted_email', true);
 insert into deepak.table_copy values (2,'mlconsole-poc','Ashok','Produce','mlconsole-poc','deepak','Produce',true);
+
+--0 2 * * 6 /home/path/dataload.sh >>/home/path/logfile.log  2>&1
