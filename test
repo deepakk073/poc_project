@@ -14,3 +14,64 @@ ranges = [(0, 100), (101, 200), (201, 300), (301, 400), (401, 500)]
 
 with ThreadPoolExecutor(max_workers=5) as executor:
     executor.map(lambda r: call_procedure(*r), ranges)
+
+
+#!/bin/bash
+
+# Define an array of projects, datasets, and tables
+declare -a source_projects=("source_project1" "source_project2" "source_project3")
+declare -a source_datasets=("source_dataset1" "source_dataset2" "source_dataset3")
+declare -a source_tables=("table1" "table2" "table3")
+declare -a destination_projects=("dest_project1" "dest_project2" "dest_project3")
+declare -a destination_datasets=("dest_dataset1" "dest_dataset2" "dest_dataset3")
+declare -a destination_tables=("dest_table1" "dest_table2" "dest_table3")
+
+# Define location (assuming the same location for all operations)
+LOCATION="US"
+
+# Loop through the arrays
+for i in "${!source_projects[@]}"; do
+  echo "Copying ${source_projects[$i]}:${source_datasets[$i]}.${source_tables[$i]} to ${destination_projects[$i]}:${destination_datasets[$i]}.${destination_tables[$i]}"
+
+  # Execute the bq cp command
+  bq cp --location=$LOCATION --project_id=${destination_projects[$i]} ${source_projects[$i]}:${source_datasets[$i]}.${source_tables[$i]} ${destination_datasets[$i]}.${destination_tables[$i]}
+
+  # Check if the command was successful
+  if [ $? -eq 0 ]; then
+    echo "Successfully copied ${source_projects[$i]}:${source_datasets[$i]}.${source_tables[$i]} to ${destination_projects[$i]}:${destination_datasets[$i]}.${destination_tables[$i]}"
+  else
+    echo "Failed to copy ${source_projects[$i]}:${source_datasets[$i]}.${source_tables[$i]}"
+  fi
+
+  echo "-------------------------------------------"
+done
+
+
+
+
+#!/bin/bash
+
+# Check if correct number of arguments are passed
+if [ "$#" -ne 7 ]; then
+  echo "Usage: $0 <source_project> <source_dataset> <source_table> <destination_project> <destination_dataset> <destination_table> <location>"
+  exit 1
+fi
+
+# Assign arguments to variables
+SOURCE_PROJECT=$1
+SOURCE_DATASET=$2
+SOURCE_TABLE=$3
+DEST_PROJECT=$4
+DEST_DATASET=$5
+DEST_TABLE=$6
+LOCATION=$7
+
+# Execute the bq cp command with location
+bq cp --location=$LOCATION --project_id=$DEST_PROJECT $SOURCE_PROJECT:$SOURCE_DATASET.$SOURCE_TABLE $DEST_DATASET.$DEST_TABLE
+
+# Check if the command was successful
+if [ $? -eq 0 ]; then
+  echo "Table copied successfully from $SOURCE_PROJECT:$SOURCE_DATASET.$SOURCE_TABLE to $DEST_PROJECT:$DEST_DATASET.$DEST_TABLE in location $LOCATION"
+else
+  echo "Failed to copy the table."
+fi
