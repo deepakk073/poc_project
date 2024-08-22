@@ -75,3 +75,22 @@ if [ $? -eq 0 ]; then
 else
   echo "Failed to copy the table."
 fi
+#!/bin/bash
+
+# Run the first script without asking for input
+echo "Running the first script..."
+./script1.sh
+
+# Prompt the user for input before running the next script
+read -p "Do you want to continue with the second script? (y/n): " choice
+
+# Check the user's input
+if [ "$choice" == "y" ]; then
+    echo "Running the second script..."
+    ./script2.sh
+else
+    echo "Cancelling further execution."
+    exit 1
+fi
+
+# Continue with any additional scripts if needed
