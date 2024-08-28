@@ -94,3 +94,26 @@ else
 fi
 
 # Continue with any additional scripts if needed
+
+
+
+
+
+#!/bin/bash
+
+# Define variables
+PROJECT_ID="your-project-id"
+DATASET_ID="your-dataset-id"
+TABLE_ID="your-table-id"
+PARAMETER_COLUMN="your-column-name"
+ROUTINE_NAME="your-routine-name"
+
+# Step 1: Query the parameter value from the table
+PARAMETER_VALUE=$(bq --quiet --format=csv query --use_legacy_sql=false \
+  "SELECT $PARAMETER_COLUMN FROM \`$PROJECT_ID.$DATASET_ID.$TABLE_ID\` LIMIT 1" | tail -n 1)
+
+# Step 2: Execute the routine using the parameter
+bq query --use_legacy_sql=false \
+  "CALL \`$PROJECT_ID.$DATASET_ID.$ROUTINE_NAME\`('$PARAMETER_VALUE');"
+
+
