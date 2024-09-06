@@ -1,3 +1,41 @@
+
+#!/bin/bash
+
+# Configuration for SMTP
+SMTP_SERVER="smtp.example.com"
+SMTP_PORT=587
+SMTP_USER="your_smtp_user"
+SMTP_PASSWORD="your_smtp_password"
+SENDER_EMAIL="your_email@example.com"
+
+# Function to send email using mailx
+send_email() {
+  local to=$1
+  local subject=$2
+  local body=$3
+
+  echo "$body" | mailx -s "$subject" -S smtp="smtp://$SMTP_SERVER:$SMTP_PORT" \
+    -S smtp-auth=login -S smtp-auth-user="$SMTP_USER" \
+    -S smtp-auth-password="$SMTP_PASSWORD" -S from="$SENDER_EMAIL" "$to"
+
+  return $?
+}
+
+# Test values
+TEST_EMAIL_TO="recipient@example.com"
+TEST_EMAIL_SUBJECT="Test Email"
+TEST_EMAIL_BODY="This is a test email sent from the shell script using mailx."
+
+# Sending test email
+send_email "$TEST_EMAIL_TO" "$TEST_EMAIL_SUBJECT" "$TEST_EMAIL_BODY"
+if [ $? -eq 0 ]; then
+  echo "Test email sent successfully to $TEST_EMAIL_TO."
+else
+  echo "Failed to send test email to $TEST_EMAIL_TO."
+fi
+
+
+
 #!/bin/bash
 
 # Configuration
