@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Configuration
+PROJECT_ID="your_project_id"
+DATASET_ID="your_dataset_id"
+TABLE_ID="email_outbox"
+SMTP_SERVER="smtp.example.com"
+SMTP_PORT=587
+SMTP_USER="your_smtp_user"
+SMTP_PASSWORD="your_smtp_password"
+SENDER_EMAIL="your_email@example.com"
+
+# Temporary files
+QUERY_RESULT="emails_to_send.json"
+
+# Query BigQuery to get all unsent emails
+echo "Fetching unsent emails from BigQuery..."
+bq query --nouse_legacy_sql --format=json "
+SELECT email_to, email_subject, Email_text
+FROM \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\`
+WHERE is_sent = 0
+" > $QUERY_RESULT
+
+# Check if there are any emails to send
+if [[ ! -s $QUERY_RESULT ]]; then
+  echo "No unsent emails found."
+  exit 0
+fi
+
+# Function to send email
+send_email() {
+  local to=$1
+  local subject=$2
+  local body=$3
+
+  echo -e "To: $to\nSubject: $subject\n\n$body" | msmtp --host=$SMTP_SERVER --port=$SMTP_PORT --auth=on \
+    --user=$SMTP_USER --passwordeval="echo $SMTP_PASSWORD" --from=$SENDER_EMAIL --tls=on $to
+
+  return $?
+}
+
+# Iterate over the emails and send them
+for row in $(cat $QUERY_RESULT | jq -r '.[] | @base64'); do
+  _jq() {
+    echo ${row} | base64 --decode | jq -r ${1}
+  }
+
+  EMAIL_TO=$(_jq '.email_to')
+  EMAIL_SUBJECT=$(_jq '.email_subject')
+  EMAIL_TEXT=$(_jq '.Email_text')
+
+  echo "Sending email to $EMAIL_TO with subject: $EMAIL_SUBJECT"
+  
+  # Send email
+  send_email "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_TEXT"
+  if [ $? -eq 0 ]; then
+    echo "Email sent successfully to $EMAIL_TO."
+    
+    # Update the BigQuery table to mark the email as sent
+    echo "Updating BigQuery for $EMAIL_TO..."
+    bq query --nouse_legacy_sql "
+    UPDATE \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\`
+    SET is_sent = 1
+    WHERE email_to = '$EMAIL_TO' AND is_sent = 0
+    "
+  else
+    echo "Failed to send email to $EMAIL_TO."
+  fi
+done
+
+echo "Email sending process completed."
