@@ -282,3 +282,65 @@ WHERE
   is_sent = 0
 
 
+#!/bin/bash
+
+# Set BigQuery project and table information
+PROJECT_ID="your_project_id"
+DATASET_ID="your_dataset_id"
+TABLE_ID="email_outbox"
+
+# Temporary file to store email data
+EMAIL_DATA_FILE="/tmp/email_data.csv"
+
+# Function to send email using mail command or SMTP client
+send_email() {
+  local email_to="$1"
+  local email_subject="$2"
+  local email_text="$3"
+
+  # Use the mail command (adjust to your environment's email-sending method)
+  printf "%b" "$email_text" | mail -s "$email_subject" "$email_to"
+}
+
+# Fetch unsent emails from BigQuery
+bq query --use_legacy_sql=false --format=csv "SELECT email_to, email_subject, CONCAT('\"', REPLACE(email_text, '\"', '\"\"'), '\"') AS email_text FROM \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\` WHERE is_sent = 0" > "$EMAIL_DATA_FILE"
+
+# Process the CSV file
+awk -F, -v q='"' '
+BEGIN { OFS="," }
+{
+  # Skip header line
+  if (NR == 1) {
+    next
+  }
+
+  # Extract and clean fields
+  email_to = $1
+  email_subject = $2
+  email_text = $3
+
+  # Remove surrounding quotes from email_text if present
+  gsub(/^"|"$/, "", email_text)
+
+  # Replace escaped newlines with actual newlines
+  gsub(/\\n/, "\n", email_text)
+
+  # Print fields in CSV format
+  print email_to, email_subject, email_text
+}
+' "$EMAIL_DATA_FILE" | while IFS=, read -r email_to email_subject email_text
+do
+  # Handle multi-line email_text and remove extra quotes
+  email_text=$(echo "$email_text" | sed 's/^"//;s/"$//')
+
+  echo "Sending email to: $email_to"
+  send_email "$email_to" "$email_subject" "$email_text"
+
+  # Update the sent flag in BigQuery
+  bq query --use_legacy_sql=false "UPDATE \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\` SET is_sent = 1 WHERE email_to = '$email_to' AND email_subject = '$email_subject'"
+done
+
+# Clean up
+rm "$EMAIL_DATA_FILE"
+
+echo "All emails processed."
