@@ -208,3 +208,67 @@ rm "$EMAIL_DATA_FILE"
 
 echo "All emails processed."
 
+
+
+#!/bin/bash
+
+# Input file with concatenated columns
+CONCATENATED_FILE="concatenated_file.csv"
+TEMP_CSV_FILE="/tmp/temp_email_data.csv"
+
+# Function to send email using mail command or SMTP client
+send_email() {
+  local email_to="$1"
+  local email_subject="$2"
+  local email_text="$3"
+
+  # Use the mail command (adjust to your environment's email-sending method)
+  printf "%b" "$email_text" | mail -s "$email_subject" "$email_to"
+}
+
+# Convert concatenated file to proper CSV format
+# Replace tildes with commas, handle multi-line text
+awk -F'~' '
+BEGIN { OFS="," }
+NR > 1 {
+    email_to = $1;
+    email_subject = $2;
+    email_text = $3;
+    
+    # Handle potential additional tildes within email_text
+    for (i=4; i<=NF; i++) {
+        email_text = email_text "~" $i;
+    }
+    
+    # Replace tilde with newline within email_text if needed (example replacement)
+    # email_text = gensub(/~/, "\n", "g", email_text);
+
+    # Print in CSV format
+    print email_to, email_subject, email_text;
+}
+' "$CONCATENATED_FILE" > "$TEMP_CSV_FILE"
+
+# Process the CSV file
+while IFS=, read -r email_to email_subject email_text
+do
+  # Remove surrounding quotes from email_text if present
+  email_text=$(echo "$email_text" | sed 's/^"//;s/"$//')
+
+  # Convert CSV newlines to actual newlines
+  email_text=$(echo "$email_text" | sed 's/\\n/\n/g')
+
+  if [ "$email_to" != "email_to" ]; then  # Skip the header row
+    echo "Sending email to: $email_to"
+    send_email "$email_to" "$email_subject" "$email_text"
+
+    # Update the sent flag in BigQuery
+    bq query --use_legacy_sql=false "UPDATE \`${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}\` SET is_sent = 1 WHERE email_to = '$email_to' AND email_subject = '$email_subject'"
+  fi
+done < "$TEMP_CSV_FILE"
+
+# Clean up
+rm "$TEMP_CSV_FILE"
+
+echo "All emails processed."
+
+
