@@ -272,3 +272,13 @@ rm "$TEMP_CSV_FILE"
 echo "All emails processed."
 
 
+SELECT 
+  email_to,
+  email_subject,
+  CONCAT('\"', REPLACE(email_text, '\"', '\"\"'), '\"') AS email_text
+FROM 
+  `${PROJECT_ID}.${DATASET_ID}.${TABLE_ID}`
+WHERE 
+  is_sent = 0
+
+
