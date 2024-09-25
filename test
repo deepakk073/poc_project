@@ -1,4 +1,4 @@
-https://drive.google.com/file/d/1R7R4SmwC-nEubnIvB0zQnHvHQxLvdRHF/view?usp=drivesdk
+3https://drive.google.com/file/d/1R7R4SmwC-nEubnIvB0zQnHvHQxLvdRHF/view?usp=drivesdk
 
 from concurrent.futures import ThreadPoolExecutor
 from google.cloud import bigquery
@@ -344,3 +344,10 @@ done
 rm "$EMAIL_DATA_FILE"
 
 echo "All emails processed."
+
+
+SELECT e1.employee_name, e1.salary, e1.department_id
+FROM employees e1
+WHERE e1.salary > (SELECT AVG(e2.salary)
+                   FROM employees e2
+                   WHERE e2.department_id = e1.department_id);
