@@ -351,3 +351,12 @@ FROM employees e1
 WHERE e1.salary > (SELECT AVG(e2.salary)
                    FROM employees e2
                    WHERE e2.department_id = e1.department_id);
+
+
+SELECT e1.employee_name, e1.salary, e1.department_id
+FROM employees e1
+JOIN (SELECT department_id, AVG(salary) AS avg_salary
+      FROM employees
+      GROUP BY department_id) avg_salaries
+ON e1.department_id = avg_salaries.department_id
+WHERE e1.salary > avg_salaries.avg_salary;
