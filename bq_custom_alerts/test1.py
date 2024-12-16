@@ -1,3 +1,48 @@
+WITH ExtractedQueries AS (
+  SELECT
+    protopayload_auditlog.authenticationInfo.principalEmail AS user_email,
+    protopayload_auditlog.serviceData_v1_bigquery.jobCompletedEvent.job.jobConfiguration.query.query AS query_text,
+    resource.labels.project_id AS project_id,
+    TIMESTAMP(protoPayload.serviceData_v1_bigquery.jobCompletedEvent.job.jobStatistics.createTime) AS query_time
+  FROM
+    `project.dataset.bigquery_logs`
+  WHERE
+    protoPayload.serviceName = "bigquery.googleapis.com"
+    AND protoPayload.methodName = "jobservice.jobcompleted" -- Focus only on completed jobs
+    AND protopayload_auditlog.serviceData_v1_bigquery.jobCompletedEvent.job.jobConfiguration.query IS NOT NULL
+),
+PIIColumns AS (
+  SELECT
+    table_name,
+    column_name
+  FROM
+    `project.dataset.pii_columns_table`
+),
+MatchedAccess AS (
+  SELECT
+    eq.user_email,
+    eq.query_text,
+    pii.table_name,
+    pii.column_name,
+    eq.query_time
+  FROM
+    ExtractedQueries eq
+  JOIN
+    PIIColumns pii
+  ON
+    eq.query_text LIKE CONCAT('%', pii.table_name, '%')
+    AND eq.query_text LIKE CONCAT('%', pii.column_name, '%')
+)
+SELECT
+  user_email,
+  table_name,
+  column_name,
+  query_time,
+  query_text
+FROM
+  MatchedAccess
+ORDER BY
+  query_time DESC;
 
 #!/bin/bash
 
