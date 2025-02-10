@@ -379,3 +379,18 @@ VALUES
 (5, 'Charlie Wilson', 102, 80000.00, '2017-06-20', 2),
 (6, 'Emily Davis', 103, 52000.00, '2022-05-16', 4);
 
+-------------------------------------------------------------------------------------------------------------------
+#!/bin/bash
+
+DB_SERVER="localhost"
+DB_NAME="your_database"
+SQL_FILE="/path/to/deploy.sql"
+
+/opt/mssql-tools/bin/sqlcmd -S $DB_SERVER -d $DB_NAME -U sa -P 'YourPassword' -i $SQL_FILE
+
+if [ $? -eq 0 ]; then
+    echo "SQL deployment successful!"
+else
+    echo "SQL deployment failed!"
+    exit 1
+fi
