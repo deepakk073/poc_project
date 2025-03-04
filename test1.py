@@ -7,24 +7,21 @@ def terraform_to_dict(file_path):
     with open(file_path, 'r') as file:
         content = file.read()
 
-    # Extract resource blocks
-    resources = re.findall(r'resource\s+"([^"]+)"\s+"([^"]+)"\s*{([^}]+)}', content)
-    if resources:
-        terraform_dict["resources"] = {}
-        for resource_type, resource_name, resource_content in resources:
-            terraform_dict["resources"][resource_name] = {
-                "type": resource_type,
-                "content": resource_content.strip()
-            }
+    # Extracting `app_data` block and inner values
+    app_data = re.findall(r'app_data\s*=\s*\[(.*?)\]', content, re.DOTALL)
+    if app_data:
+        terraform_dict["app_data"] = []
+        for entry in app_data[0].split('},'):
+            entry = entry.strip()
+            if entry:
+                # Extract shrt_name and sae
+                shrt_name = re.findall(r'shrt_name\s*=\s*"([^"]+)"', entry)
+                sae = re.findall(r'put\s*=\s*"([^"]+)"', entry)
 
-    # Extract variable blocks
-    variables = re.findall(r'variable\s+"([^"]+)"\s*{([^}]+)}', content)
-    if variables:
-        terraform_dict["variables"] = {}
-        for variable_name, variable_content in variables:
-            terraform_dict["variables"][variable_name] = {
-                "content": variable_content.strip()
-            }
+                terraform_dict["app_data"].append({
+                    "shrt_name": shrt_name[0] if shrt_name else None,
+                    "sae": sae
+                })
 
     return terraform_dict
 
@@ -41,6 +38,9 @@ terraform_dict = terraform_to_dict('example.tf')
 # Convert to JSON string for a clear view
 print(json.dumps(terraform_dict, indent=4))
 
-# Extract specific value (example: resources > "my_resource_name")
-result = extract_value_from_dict(terraform_dict, 'resources.my_resource_name')
-print("Extracted value:", result)
+# Extract specific values
+result_shrt_name = extract_value_from_dict(terraform_dict, 'app_data.0.shrt_name')
+print("Extracted shrt_name:", result_shrt_name)
+
+result_sae = extract_value_from_dict(terraform_dict, 'app_data.0.sae')
+print("Extracted sae:", result_sae)
