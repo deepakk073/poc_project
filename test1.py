@@ -236,3 +236,5 @@ if extracted_data:
     insert_into_bigquery(extracted_data)
 else:
     print("No valid data found to insert.")
+------------------------------------------------------------------------
+sae_def_match = re.search(r'sae_def\s*=\s*\[\s*([\s\S]*?)\n?\s*\](?!")', block)
