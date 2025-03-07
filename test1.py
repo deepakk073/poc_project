@@ -1,46 +1,33 @@
 import re
-import json
 
-def terraform_to_dict(file_path):
-    terraform_dict = {}
-
-    with open(file_path, 'r') as file:
+def extract_data_from_file(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
         content = file.read()
 
-    # Extracting `app_data` block and inner values
-    app_data = re.findall(r'app_data\s*=\s*\[(.*?)\]', content, re.DOTALL)
-    if app_data:
-        terraform_dict["app_data"] = []
-        for entry in app_data[0].split('},'):
-            entry = entry.strip()
-            if entry:
-                # Extract shrt_name and sae
-                shrt_name = re.findall(r'shrt_name\s*=\s*"([^"]+)"', entry)
-                sae = re.findall(r'put\s*=\s*"([^"]+)"', entry)
+    # Split content based on '*****'
+    blocks = re.split(r'\*{5,}', content)
 
-                terraform_dict["app_data"].append({
-                    "shrt_name": shrt_name[0] if shrt_name else None,
-                    "sae": sae
-                })
+    extracted_data = []
 
-    return terraform_dict
+    for block in blocks:
+        # Extract short_name
+        short_name_match = re.search(r'short_name\s*=\s*"([^"]+)"', block)
+        short_name = short_name_match.group(1) if short_name_match else None
 
-def extract_value_from_dict(terraform_dict, key):
-    keys = key.split(".")
-    value = terraform_dict
-    for k in keys:
-        value = value.get(k, {})
-    return value
+        # Extract sae_def content
+        sae_def_match = re.search(r'sae_def\s*=\s*(\[\{.*?\}\])', block, re.DOTALL)
+        sae_def_values = sae_def_match.group(1) if sae_def_match else None
+
+        # Store results only if short_name exists
+        if short_name:
+            extracted_data.append({"short_name": short_name, "sae_def": sae_def_values})
+
+    return extracted_data
 
 # Example usage
-terraform_dict = terraform_to_dict('example.tf')
+file_path = "your_file.txt"  # Replace with actual file path
+data = extract_data_from_file(file_path)
 
-# Convert to JSON string for a clear view
-print(json.dumps(terraform_dict, indent=4))
-
-# Extract specific values
-result_shrt_name = extract_value_from_dict(terraform_dict, 'app_data.0.shrt_name')
-print("Extracted shrt_name:", result_shrt_name)
-
-result_sae = extract_value_from_dict(terraform_dict, 'app_data.0.sae')
-print("Extracted sae:", result_sae)
+# Print results
+for item in data:
+    print(item)
