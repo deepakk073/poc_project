@@ -394,3 +394,47 @@ else
     echo "SQL deployment failed!"
     exit 1
 fi
+
+
+import requests
+import json
+from google.cloud import bigquery
+
+# ----- CONFIG -----
+BITBUCKET_URL = "https://bitbucket.org/<workspace>/<repo>/raw/<branch>/<path-to-json-file>"
+LOCAL_JSON_FILE = "downloaded.json"
+PROJECT_ID = "your-project-id"
+DATASET_ID = "your_dataset"
+TABLE_ID = "your_table"
+# ------------------
+
+# 1. Download JSON file from Bitbucket (raw link)
+def download_json_file(url, local_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(response.text)
+        print(f"✅ JSON file downloaded to {local_path}")
+    else:
+        raise Exception(f"Failed to download file: {response.status_code} - {response.text}")
+
+# 2. Load JSON into BigQuery
+def load_json_to_bigquery(local_path, project_id, dataset_id, table_id):
+    client = bigquery.Client(project=project_id)
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+
+    job_config = bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        autodetect=True,  # Or define a schema manually
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+    )
+
+    with open(local_path, "rb") as source_file:
+        job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+
+    job.result()  # Waits for the job to complete
+    print(f"✅ Data loaded into {table_ref}")
+
+# ---- Run All ----
+download_json_file(BITBUCKET_URL, LOCAL_JSON_FILE)
+load_json_to_bigquery(LOCAL_JSON_FILE, PROJECT_ID, DATASET_ID, TABLE_ID)
