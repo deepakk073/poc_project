@@ -407,6 +407,15 @@ PROJECT_ID = "your-project-id"
 DATASET_ID = "your_dataset"
 TABLE_ID = "your_table"
 # ------------------
+def convert_multiline_to_ndjson(input_file, output_file):
+    with open(input_file, "r", encoding="utf-8") as f:
+        data = json.load(f)  # parses as a Python list of dicts
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for record in data:
+            f.write(json.dumps(record) + "\n")
+
+    print(f"✅ Converted to NDJSON format: {output_file}")
 
 # 1. Download JSON file from Bitbucket (raw link)
 def download_json_file(url, local_path):
