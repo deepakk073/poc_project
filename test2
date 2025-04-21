@@ -1,0 +1,50 @@
+#!/bin/bash
+
+PROJECT_ID="your-project-id"
+BQ_DATASET="gcs_metadata"
+BQ_TABLE="bucket_info"
+TEMP_FILE="bucket_info.csv"
+
+# Create BigQuery dataset if not exists
+bq --location=US mk -d --if_not_exists $BQ_DATASET
+
+# Create table if not exists
+bq query --use_legacy_sql=false --format=none \
+"CREATE TABLE IF NOT EXISTS \`${PROJECT_ID}.${BQ_DATASET}.${BQ_TABLE}\` (
+  bucket_name STRING,
+  location STRING,
+  storage_class STRING,
+  versioning_enabled BOOL,
+  time_created TIMESTAMP,
+  size_bytes INT64
+)"
+
+# Remove old CSV file
+rm -f $TEMP_FILE
+
+# Get list of buckets
+for BUCKET in $(gsutil ls -p $PROJECT_ID); do
+  BUCKET_NAME=$(echo $BUCKET | sed 's/gs:\/\///;s/\/$//')
+
+  # Get bucket metadata
+  META=$(gsutil bucketinfo $BUCKET_NAME 2>/dev/null || gsutil ls -L -b gs://$BUCKET_NAME)
+
+  LOCATION=$(echo "$META" | grep -m1 "Location constraint" | awk -F: '{print $2}' | xargs)
+  STORAGE_CLASS=$(echo "$META" | grep -m1 "Storage class" | awk -F: '{print $2}' | xargs)
+  VERSIONING=$(echo "$META" | grep -m1 "Versioning status" | awk -F: '{print $2}' | xargs)
+  TIME_CREATED=$(echo "$META" | grep -m1 "Creation time" | sed 's/.*: //')
+
+  [[ "$VERSIONING" == "Enabled" ]] && VERSIONING_ENABLED=true || VERSIONING_ENABLED=false
+
+  # Get total size in bytes
+  SIZE_BYTES=$(gsutil du -s gs://$BUCKET_NAME | awk '{print $1}')
+
+  # Append to temp file
+  echo "$BUCKET_NAME,$LOCATION,$STORAGE_CLASS,$VERSIONING_ENABLED,$TIME_CREATED,$SIZE_BYTES" >> $TEMP_FILE
+done
+
+# Load CSV into BigQuery
+bq load --autodetect --replace --skip_leading_rows=0 \
+  --source_format=CSV ${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE} $TEMP_FILE
+
+echo "Upload complete. Data saved to BigQuery table ${BQ_DATASET}.${BQ_TABLE}."
