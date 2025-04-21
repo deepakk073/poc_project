@@ -97,3 +97,29 @@ bq load --replace --source_format=NEWLINE_DELIMITED_JSON \
   "${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE}" $TEMP_FILE
 
 echo "✅ Upload complete. Bucket metadata and size info saved to BigQuery table ${BQ_DATASET}.${BQ_TABLE}."
+
+
+COUNT=0
+MAX_BUCKETS=10
+
+for BUCKET in $(gsutil ls -p $PROJECT_ID); do
+  ((COUNT++))
+  if [ $COUNT -gt $MAX_BUCKETS ]; then
+    break
+  fi
+
+  BUCKET_NAME=$(echo $BUCKET | sed 's/gs:\/\///;s/\/$//')
+
+  echo "Processing bucket ($COUNT): $BUCKET_NAME"
+
+  # Get structured metadata
+  META_JSON=$(gcloud storage buckets describe $BUCKET_NAME --project=$PROJECT_ID --format=json)
+
+  # Get total size and object count
+  BUCKET_STATS=$(gsutil ls -l -r gs://$BUCKET_NAME/** | grep -v "^TOTAL:" | awk 'BEGIN {total=0; count=0} /^[0-9]/ {total+=$1; count++} END {print total, count}')
+  SIZE_BYTES=$(echo $BUCKET_STATS | awk '{print $1}')
+  FILE_COUNT=$(echo $BUCKET_STATS | awk '{print $2}')
+
+  # Create NDJSON line
+  echo "{\"meta_json\": $META_JSON, \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
+done
