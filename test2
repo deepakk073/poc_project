@@ -48,3 +48,52 @@ bq load --autodetect --replace --skip_leading_rows=0 \
   --source_format=CSV ${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE} $TEMP_FILE
 
 echo "Upload complete. Data saved to BigQuery table ${BQ_DATASET}.${BQ_TABLE}."
+
+
+
+
+__________
+#!/bin/bash
+
+PROJECT_ID="your-project-id"
+BQ_DATASET="gcs_metadata"
+BQ_TABLE="bucket_info"
+TEMP_FILE="bucket_info.ndjson"
+
+# Create BigQuery dataset if not exists
+bq --location=US mk -d --if_not_exists $BQ_DATASET
+
+# Create BigQuery table if not exists
+bq query --use_legacy_sql=false --format=none \
+"CREATE TABLE IF NOT EXISTS \`${PROJECT_ID}.${BQ_DATASET}.${BQ_TABLE}\` (
+  meta_json JSON,
+  size_bytes INT64,
+  file_count INT64
+)"
+
+# Remove previous data file
+rm -f $TEMP_FILE
+
+# Loop through each bucket
+for BUCKET in $(gsutil ls -p $PROJECT_ID); do
+  BUCKET_NAME=$(echo $BUCKET | sed 's/gs:\/\///;s/\/$//')
+
+  echo "Processing bucket: $BUCKET_NAME"
+
+  # Get structured metadata
+  META_JSON=$(gcloud storage buckets describe $BUCKET_NAME --project=$PROJECT_ID --format=json)
+
+  # Get total size and object count
+  BUCKET_STATS=$(gsutil ls -l -r gs://$BUCKET_NAME/** | grep -v "^TOTAL:" | awk 'BEGIN {total=0; count=0} /^[0-9]/ {total+=$1; count++} END {print total, count}')
+  SIZE_BYTES=$(echo $BUCKET_STATS | awk '{print $1}')
+  FILE_COUNT=$(echo $BUCKET_STATS | awk '{print $2}')
+
+  # Create NDJSON line (JSON per line format for BigQuery)
+  echo "{\"meta_json\": $META_JSON, \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
+done
+
+# Load NDJSON into BigQuery
+bq load --replace --source_format=NEWLINE_DELIMITED_JSON \
+  "${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE}" $TEMP_FILE
+
+echo "✅ Upload complete. Bucket metadata and size info saved to BigQuery table ${BQ_DATASET}.${BQ_TABLE}."
