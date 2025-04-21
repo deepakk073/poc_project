@@ -123,3 +123,10 @@ for BUCKET in $(gsutil ls -p $PROJECT_ID); do
   # Create NDJSON line
   echo "{\"meta_json\": $META_JSON, \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
 done
+
+
+_____________<<<
+META_JSON=$(gcloud storage buckets describe $BUCKET_NAME --project=$PROJECT_ID --format=json | tr -d '\n' | sed 's/  */ /g' | sed 's/"/\\"/g')
+
+
+echo "{\"meta_json\": \"$META_JSON\", \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
