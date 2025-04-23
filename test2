@@ -123,6 +123,91 @@ for BUCKET in $(gsutil ls -p $PROJECT_ID); do
   # Create NDJSON line
   echo "{\"meta_json\": $META_JSON, \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
 done
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+#!/bin/bash
+
+# Usage: ./run_env_ingestion.sh dev|qa|pp
+
+ENV=$1
+
+if [[ "$ENV" != "dev" && "$ENV" != "qa" && "$ENV" != "pp" ]]; then
+  echo "Usage: $0 [dev|qa|pp]"
+  exit 1
+fi
+
+# ENV-SPECIFIC SETTINGS
+case $ENV in
+  dev)
+    SA_KEY="/path/to/dev-sa.json"
+    PROJECT_ID="your-dev-project-id"
+    BQ_TABLE="bucket_info_dev"
+    ;;
+  qa)
+    SA_KEY="/path/to/qa-sa.json"
+    PROJECT_ID="your-qa-project-id"
+    BQ_TABLE="bucket_info_qa"
+    ;;
+  pp)
+    SA_KEY="/path/to/pp-sa.json"
+    PROJECT_ID="your-pp-project-id"
+    BQ_TABLE="bucket_info_pp"
+    ;;
+esac
+
+# CONSTANT SETTINGS
+BQ_DATASET="gcs_metadata"
+TMP_FILE="/tmp/${BQ_TABLE}_$(date +%s).ndjson"
+MAX_BUCKETS=10
+
+# Activate service account (temporary and scoped to this shell only)
+gcloud auth activate-service-account --key-file=$SA_KEY --project=$PROJECT_ID
+
+# Create dataset if not exists
+bq --location=US mk -d --if_not_exists "${PROJECT_ID}:${BQ_DATASET}"
+
+# Create table if not exists
+bq query --use_legacy_sql=false --format=none \
+"CREATE TABLE IF NOT EXISTS \`${PROJECT_ID}.${BQ_DATASET}.${BQ_TABLE}\` (
+  meta_json STRING,
+  size_bytes INT64,
+  file_count INT64
+)"
+
+# Clear temp file
+rm -f "$TMP_FILE"
+
+# Process up to MAX_BUCKETS
+COUNT=0
+for BUCKET in $(gsutil ls -p $PROJECT_ID); do
+  ((COUNT++))
+  if [ $COUNT -gt $MAX_BUCKETS ]; then
+    break
+  fi
+
+  BUCKET_NAME=$(echo $BUCKET | sed 's/gs:\/\///;s/\/$//')
+
+  echo "[$ENV] Processing bucket: $BUCKET_NAME"
+
+  # Get bucket metadata and convert to single-line JSON string
+  META_JSON=$(gcloud storage buckets describe $BUCKET_NAME --project=$PROJECT_ID --format=json | tr -d '\n' | sed 's/"/\\"/g')
+
+  # Get bucket size and object count
+  STATS=$(gsutil ls -l -r gs://$BUCKET_NAME/** | grep -v "^TOTAL:" | awk 'BEGIN {s=0;c=0} /^[0-9]/ {s+=$1; c++} END {print s,c}')
+  SIZE_BYTES=$(echo $STATS | awk '{print $1}')
+  FILE_COUNT=$(echo $STATS | awk '{print $2}')
+
+  # Append to NDJSON
+  echo "{\"meta_json\": \"$META_JSON\", \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> "$TMP_FILE"
+done
+
+# Load to BigQuery
+bq load --replace --source_format=NEWLINE_DELIMITED_JSON \
+  "${PROJECT_ID}:${BQ_DATASET}.${BQ_TABLE}" "$TMP_FILE"
+
+echo "[$ENV]  Ingestion complete. Data loaded to ${BQ_DATASET}.${BQ_TABLE}"
+
+# Optional cleanup
+rm -f "$TMP_FILE"
 
 
 _____________<<<
@@ -130,3 +215,8 @@ META_JSON=$(gcloud storage buckets describe $BUCKET_NAME --project=$PROJECT_ID -
 
 
 echo "{\"meta_json\": \"$META_JSON\", \"size_bytes\": $SIZE_BYTES, \"file_count\": $FILE_COUNT}" >> $TEMP_FILE
+---------------------------------------------------------------------------------------------------------------------
+./run_env_ingestion.sh dev &
+./run_env_ingestion.sh qa &
+./run_env_ingestion.sh pp &
+wait
