@@ -447,3 +447,132 @@ def load_json_to_bigquery(local_path, project_id, dataset_id, table_id):
 # ---- Run All ----
 download_json_file(BITBUCKET_URL, LOCAL_JSON_FILE)
 load_json_to_bigquery(LOCAL_JSON_FILE, PROJECT_ID, DATASET_ID, TABLE_ID)
+CREATE OR REPLACE PROCEDURE `your_project.your_dataset.get_object_dependencies`(
+  project_id STRING,
+  dataset_id STRING,
+  root_object_name STRING
+)
+BEGIN
+  DECLARE object_to_check STRING;
+  DECLARE done BOOL DEFAULT FALSE;
+
+  -- Construct full object name
+  SET object_to_check = CONCAT(project_id, '.', dataset_id, '.', root_object_name);
+
+  -- Main output table
+  CREATE OR REPLACE TABLE `your_project.your_dataset.object_dependencies` (
+    level INT64,
+    parent_object STRING,
+    child_object STRING,
+    child_type STRING,
+    dependency_path STRING
+  );
+
+  -- Optional: Table to track circular references
+  CREATE OR REPLACE TABLE `your_project.your_dataset.circular_dependencies` (
+    offending_path STRING,
+    offending_object STRING
+  );
+
+  -- Temp tables
+  CREATE TEMP TABLE dependency_hierarchy (
+    level INT64,
+    parent_object STRING,
+    child_object STRING,
+    child_type STRING,
+    dependency_path STRING
+  );
+
+  CREATE TEMP TABLE processing_queue (
+    parent_object STRING,
+    child_object STRING,
+    level INT64,
+    dependency_path STRING
+  );
+
+  -- Seed with root
+  INSERT INTO processing_queue
+  VALUES (NULL, object_to_check, 0, object_to_check);
+
+  -- Begin loop
+  LOOP
+    IF (SELECT COUNT(*) FROM processing_queue) = 0 THEN
+      SET done = TRUE;
+      LEAVE;
+    END IF;
+
+    CREATE TEMP TABLE next_queue AS
+    SELECT * FROM processing_queue;
+
+    DELETE FROM processing_queue;
+
+    FOR row IN (SELECT * FROM next_queue) DO
+      DECLARE obj_type STRING DEFAULT NULL;
+      DECLARE view_sql STRING DEFAULT NULL;
+
+      -- Get object type
+      SET obj_type = (
+        SELECT table_type
+        FROM `your_project`.`your_dataset`.INFORMATION_SCHEMA.TABLES
+        WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = row.child_object
+        LIMIT 1
+      );
+
+      -- Insert into hierarchy
+      INSERT INTO dependency_hierarchy
+      SELECT
+        row.level,
+        row.parent_object,
+        row.child_object,
+        obj_type,
+        row.dependency_path
+      WHERE row.child_object NOT IN (
+        SELECT child_object FROM dependency_hierarchy
+      );
+
+      -- Handle views
+      IF obj_type = 'VIEW' THEN
+        SET view_sql = (
+          SELECT view_definition
+          FROM `your_project`.`your_dataset`.INFORMATION_SCHEMA.VIEWS
+          WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = row.child_object
+          LIMIT 1
+        );
+
+        -- Process each referenced object
+        FOR ref IN (
+          SELECT ref_obj
+          FROM UNNEST(REGEXP_EXTRACT_ALL(view_sql, r'`([\w\-]+\.[\w\-]+\.[\w\-]+)`')) AS ref_obj
+        ) DO
+
+          -- Check if it's a circular reference in path
+          IF REGEXP_CONTAINS(row.dependency_path, r'(' || REGEXP_REPLACE(ref.ref_obj, r'([\.\-])', r'\\\1') || r')') THEN
+            INSERT INTO `your_project.your_dataset.circular_dependencies`
+            VALUES (row.dependency_path, ref.ref_obj);
+          ELSE
+            -- Queue it for next level
+            INSERT INTO processing_queue
+            SELECT
+              row.child_object,
+              ref.ref_obj,
+              row.level + 1,
+              row.dependency_path || ' → ' || ref.ref_obj
+            WHERE ref.ref_obj NOT IN (
+              SELECT child_object FROM dependency_hierarchy
+            );
+          END IF;
+
+        END FOR;
+
+      END IF;
+
+    END FOR;
+
+    DROP TABLE next_queue;
+  END LOOP;
+
+  -- Finalize output
+  INSERT INTO `your_project.your_dataset.object_dependencies`
+  SELECT * FROM dependency_hierarchy;
+
+END;
