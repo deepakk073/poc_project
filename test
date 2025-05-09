@@ -602,22 +602,28 @@ UNNEST(matched_objects) AS object;
 WITH view_defs AS (
   SELECT
     table_name,
-    LOWER(REGEXP_REPLACE(view_definition, r'--.*|/\*[\s\S]*?\*/', '')) AS view_sql -- remove comments
+    LOWER(REGEXP_REPLACE(view_definition, r'--.*|/\*[\s\S]*?\*/', '')) AS view_sql
   FROM
     `project_id.dataset_id.INFORMATION_SCHEMA.VIEWS`
+),
+cleaned_sql AS (
+  SELECT
+    table_name,
+    REGEXP_REPLACE(view_sql, r'[\n\r\t]+', ' ') AS cleaned_sql
+  FROM view_defs
 ),
 matches AS (
   SELECT
     table_name,
     REGEXP_EXTRACT_ALL(
-      view_sql,
-      r'(?i)(?:from|join|left\s+(?:outer\s+)?join|right\s+(?:outer\s+)?join|full\s+(?:outer\s+)?join|inner\s+join|cross\s+join|,)\s+`?([a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+){1,2})`?(?=\s|$|as)'
+      cleaned_sql,
+      r'(?i)(?:from|join|left(?: outer)? join|right(?: outer)? join|full(?: outer)? join|inner join|cross join|,)\s+`?([a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+){1,2})`?'
     ) AS matched_objects
-  FROM view_defs
+  FROM cleaned_sql
 )
 SELECT
   table_name,
   DISTINCT object
 FROM matches,
-UNNEST(matched_objects) AS object
-WHERE NOT REGEXP_CONTAINS(object, r'^\d+$');  -- eliminate accidental numeric captures
+UNNEST(matched_objects) AS object;
+
