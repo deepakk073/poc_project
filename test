@@ -598,3 +598,26 @@ SELECT
   object
 FROM matches,
 UNNEST(matched_objects) AS object;
+--------------------------------------------------------------------------------------
+WITH view_defs AS (
+  SELECT
+    table_name,
+    LOWER(REGEXP_REPLACE(view_definition, r'--.*|/\*[\s\S]*?\*/', '')) AS view_sql -- remove comments
+  FROM
+    `project_id.dataset_id.INFORMATION_SCHEMA.VIEWS`
+),
+matches AS (
+  SELECT
+    table_name,
+    REGEXP_EXTRACT_ALL(
+      view_sql,
+      r'(?i)(?:from|join|left\s+(?:outer\s+)?join|right\s+(?:outer\s+)?join|full\s+(?:outer\s+)?join|inner\s+join|cross\s+join|,)\s+`?([a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+){1,2})`?(?=\s|$|as)'
+    ) AS matched_objects
+  FROM view_defs
+)
+SELECT
+  table_name,
+  DISTINCT object
+FROM matches,
+UNNEST(matched_objects) AS object
+WHERE NOT REGEXP_CONTAINS(object, r'^\d+$');  -- eliminate accidental numeric captures
