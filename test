@@ -576,3 +576,25 @@ BEGIN
   SELECT * FROM dependency_hierarchy;
 
 END;
+-----------------------------------
+WITH view_defs AS (
+  SELECT
+    table_name,
+    LOWER(view_definition) AS view_sql
+  FROM
+    `project_id.dataset_id.INFORMATION_SCHEMA.VIEWS`
+),
+matches AS (
+  SELECT
+    table_name,
+    REGEXP_EXTRACT_ALL(
+      view_sql,
+      r'(?i)(?:from|join|left\s+(?:outer\s+)?join|right\s+(?:outer\s+)?join|full\s+(?:outer\s+)?join|inner\s+join|,\s*)\s+`?([a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+){1,2})`?'
+    ) AS matched_objects
+  FROM view_defs
+)
+SELECT
+  table_name,
+  object
+FROM matches,
+UNNEST(matched_objects) AS object;
