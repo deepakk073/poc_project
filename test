@@ -627,3 +627,8 @@ SELECT
 FROM matches,
 UNNEST(matched_objects) AS object;
 
+FORMAT(
+    'https://console.cloud.google.com/logs/query;query=insertId%%3D%%22%s%%22?project=%s',
+    insertId,
+    'your-project-id'  -- Replace with your actual GCP project ID
+  ) AS log_url
