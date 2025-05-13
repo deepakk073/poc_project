@@ -632,3 +632,13 @@ FORMAT(
     insertId,
     'your-project-id'  -- Replace with your actual GCP project ID
   ) AS log_url
+FORMAT(
+    'https://console.cloud.google.com/logs/query;query=%s?project=%s',
+    REPLACE(REPLACE(REPLACE(
+      ARRAY_TO_STRING(ARRAY_AGG(FORMAT('insertId="%s"', insertId)), ' OR '),
+      " ", "%%20"),
+      "\"", "%%22"),
+      "=", "%%3D"
+    ),
+    'your-project-id'
+  ) AS combined_log_ur
