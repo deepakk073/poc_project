@@ -220,3 +220,163 @@ echo "{\"meta_json\": \"$META_JSON\", \"size_bytes\": $SIZE_BYTES, \"file_count\
 ./run_env_ingestion.sh qa &
 ./run_env_ingestion.sh pp &
 wait
+-----------------------------------------------------------------------------------------
+Logging
+------------------------------------------------------------------------
+import datetime
+import smtplib
+from email.mime.text import MIMEText
+from google.cloud import logging_v2
+
+# Initialize client
+client = logging_v2.LoggingServiceV2Client()
+
+# Parameters
+PROJECT_ID = "your-project-id"
+PRINCIPAL_EMAIL = "principal@example.com"
+SENDER_EMAIL = "your_email@gmail.com"
+RECEIVER_EMAIL = "receiver@example.com"
+EMAIL_PASSWORD = "your_app_password"
+
+# Filter logs for last 5 mins with severity=ERROR and specific principal
+def get_log_filter():
+    now = datetime.datetime.utcnow()
+    start_time = (now - datetime.timedelta(minutes=5)).isoformat("T") + "Z"
+    return f'''
+        resource.type="gce_instance"
+        severity=ERROR
+        protoPayload.authenticationInfo.principalEmail="{PRINCIPAL_EMAIL}"
+        timestamp >= "{start_time}"
+    '''
+
+def format_logs(entries):
+    log_details = ""
+    for entry in entries:
+        timestamp = entry.timestamp
+        message = entry.text_payload or str(entry)
+        log_name = entry.log_name
+        resource = entry.resource.labels
+        url = f"https://console.cloud.google.com/logs/query;query={entry.insert_id}?project={PROJECT_ID}"
+        log_details += f"""
+        Timestamp: {timestamp}
+        Log Name: {log_name}
+        Resource: {resource}
+        Message: {message}
+        View in Cloud Logging: {url}
+        {'-'*60}
+        """
+    return log_details
+
+def send_email(subject, body):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = RECEIVER_EMAIL
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(SENDER_EMAIL, EMAIL_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+
+def main():
+    filter_str = get_log_filter()
+    parent = f"projects/{PROJECT_ID}"
+    
+    entries = client.list_log_entries(
+        {"resource_names": [parent], "filter": filter_str}
+    )
+
+    entries = list(entries)
+    if entries:
+        body = format_logs(entries)
+        send_email("GCP Logging Alert: Error Detected", body)
+    else:
+        print("No matching logs found.")
+
+if __name__ == "__main__":
+    main()
+-------------------------------------------------------------------------------------
+With BigQuery
+------------------------------------------------------------------------------------
+import datetime
+import smtplib
+from email.mime.text import MIMEText
+from google.cloud import bigquery
+
+# === CONFIG ===
+BQ_PROJECT = "your-project-id"
+BQ_DATASET = "your_dataset"
+BQ_TABLE = "audit_logs"
+PROJECT_ID = "your-project-id"
+PRINCIPAL_EMAIL = "user@example.com"  # Optional, or set to None
+EMAIL_FROM = "your_email@gmail.com"
+EMAIL_TO = "team@example.com"
+EMAIL_PASSWORD = "your_app_password"
+
+# === QUERY AUDIT LOGS IN BQ ===
+def query_audit_errors():
+    client = bigquery.Client(project=BQ_PROJECT)
+    now = datetime.datetime.utcnow()
+    start_time = (now - datetime.timedelta(minutes=5)).isoformat()
+
+    email_filter = f"""AND JSON_VALUE(protoPayload.authenticationInfo.principalEmail) = '{PRINCIPAL_EMAIL}'""" if PRINCIPAL_EMAIL else ""
+
+    query = f"""
+    SELECT
+      timestamp,
+      JSON_VALUE(protoPayload.authenticationInfo.principalEmail) AS principalEmail,
+      JSON_VALUE(protoPayload.methodName) AS methodName,
+      JSON_VALUE(protoPayload.resourceName) AS resourceName,
+      JSON_VALUE(protoPayload.status.message) AS errorMessage,
+      insertId
+    FROM `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}`
+    WHERE severity = 'ERROR'
+      AND timestamp >= TIMESTAMP('{start_time}')
+      {email_filter}
+    ORDER BY timestamp DESC
+    """
+
+    return client.query(query).result()
+
+# === FORMAT LOGS ===
+def format_results(results):
+    body = ""
+    for row in results:
+        log_filter = f'resource.type="project" AND insertId="{row.insertId}"'
+        log_url = f"https://console.cloud.google.com/logs/query;query={log_filter.replace(' ', '%20').replace('\"', '%22')}?project={PROJECT_ID}"
+
+        body += f"""
+Timestamp     : {row.timestamp}
+Principal     : {row.principalEmail}
+Method        : {row.methodName}
+Resource      : {row.resourceName}
+Error Message : {row.errorMessage}
+View in GCP   : {log_url}
+{'-'*60}
+"""
+    return body
+
+# === SEND EMAIL ===
+def send_email(subject, body):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_FROM
+    msg["To"] = EMAIL_TO
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+
+# === MAIN ===
+def main():
+    results = query_audit_errors()
+    rows = list(results)
+
+    if rows:
+        body = format_results(rows)
+        send_email("BigQuery Audit Logs Alert: Errors Detected", body)
+        print("Alert sent.")
+    else:
+        print("No error entries found.")
+
+if __name__ == "__main__":
+    main()
