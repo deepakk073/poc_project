@@ -1,2 +1,4 @@
 .env
 mlconsole-poc-bqadmin.json
+AdminAgent/__pycache__/*
+monitoring_module.cpython-312.pyc

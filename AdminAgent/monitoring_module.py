@@ -85,4 +85,3 @@ def send_email( to_email,  message_body):
 #     msg["To"] = to
 
 #     with smtplib.SMTP("smtp.yourcompany.com") as server:
-#     
