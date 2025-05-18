@@ -1,4 +1,8 @@
 .env
+<<<<<<< HEAD
 mlconsole-poc-bqadmin.json
 AdminAgent/__pycache__/*
 monitoring_module.cpython-312.pyc
+=======
+mlconsole-poc-bqadmin.json
+>>>>>>> 4cdb1cc (initial commit)
